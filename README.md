@@ -21,6 +21,32 @@ This repo is **not a fork of the Strata source**. It documents exactly what diff
 - Vision (image input) pinned to its own card so the reader doesn't fight the engine's ring.
 - VRAM/telemetry visibility for all three cards in the Strata monitor and CLI.
 
+## Performance (measured on the 3× Volta box)
+
+Full methodology + per-request records: [`BENCH.md`](BENCH.md) /
+[`bench/results.json`](bench/results.json). Engine-reported timings.
+
+Cold prefill (single stream, prompt-only):
+
+| prompt size | prefill rate |
+|---|---|
+| ~1k tok | 1,012 t/s |
+| ~3.7k tok | 1,592 t/s |
+| ~14.7k tok | 2,143 t/s |
+
+Concurrency (256-token completions; TTFT = time to first token incl. queue + prefill):
+
+| streams | aggregate out | per-stream decode | TTFT range (cold prompts) | TTFT range (shared prompt) |
+|---|---|---|---|---|
+| 1 | 62 t/s | 144 t/s | 2.3 s | 2.2 s |
+| 2 | 65 t/s cold / 91 t/s warm | 47–80 t/s | 2.3–4.7 s | 0.2–2.5 s |
+| 3 | 68 t/s cold / 110 t/s warm | 29–64 t/s | 2.3–7.1 s | 0.2–2.8 s |
+| 4 | 70 t/s cold / 83 t/s warm | 22–49 t/s | 2.3–9.4 s | 0.2–7.4 s |
+
+Rules of thumb: single-stream decode ~120–144 t/s; cache-hit streams skip
+prefill (~0.2 s TTFT); beyond ~2–3 concurrent streams the 4th stream pays
+queue-wait on TTFT. Spec decode (mtp, spec 4) accepts ~58% of drafted tokens.
+
 ## What this repo contains
 
 ```
@@ -36,6 +62,10 @@ scripts/
   rewrite_experts.py      ← one-time in-place expert-decode fixer (history; split_pack.py already contains the fix)
 patches/
   volta-serve.patch       ← the serve-side patch, apply to a stock v0.2.14 tree
+bench/
+  results.json            ← measured records (prefill, TTFT, concurrency)
+  bench.py                ← harness to regenerate them against your endpoint
+BENCH.md                  ← benchmark tables and interpretation
 LICENSE                   ← upstream MIT (Niko1221 and the Strata contributors)
 ```
 
