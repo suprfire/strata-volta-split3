@@ -1,0 +1,50 @@
+{
+    "exe":  "<ROOT>\\strata\\engine\\strata-split-3.exe",
+    "args":  [
+                 "--serve",
+                 "--native",
+                 "<ROOT>\\models\\qwen38fn\\split40\\qwen38fn-split-q4.gguf",
+                 "--mtp",
+                 "<ROOT>\\models\\qwen38fn\\mtp",
+                 "--max-context",
+                 "262144",
+                 "--spec",
+                 "4",
+                 "--batch",
+                 "4",
+                 "--conversation-cache-mib",
+                 "32768",
+                 "--vision"
+             ],
+    "cwd":  "<ROOT>\\strata",
+    "tokenizer":  "<ROOT>\\models\\qwen38fn\\pack\\tokenizer",
+    "model_name":  "qwen3.8-flash-next-split3",
+    "host":  "0.0.0.0",
+    "split_engine_note":  true,
+    "log":  "<ROOT>\\strata\\strata-split3-262k-4096p4.log",
+    "lib_dirs":  [
+                     "<CUDA_PATH>\\bin"
+                 ],
+    "env":  {
+                "CUDA_VISIBLE_DEVICES":  "2,1,0",
+                "STRATA_SM70_TABLE":  "1",
+                "FNX_PF_ROWS":  "4096",
+                "FNX_ARENA":  "0",
+                "FNX_PEER":  "1",
+                "FNX_PF_PEER":  "1",
+                "FNX_PF_A2A_ROWS":  "1024",
+                "FNX_PF_PASS":  "4",
+                "FNX_EXPERT_RAM_GIB":  "off"
+            },
+    "vision":  {
+                   "exe":  "<ROOT>\\strata\\engine\\strata-vision.exe",
+                   "mmproj":  "<ROOT>\\models\\mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+                   "model":  "<ROOT>\\models\\qwen38fn\\qwen-nvfp4-gptq-dense.gguf",
+                   "gpu":  true,
+                   "cuda_device":  0,
+                   "max_tokens":  1024
+               },
+    "elastic_idle_s":  30,
+    "idle_unload_s":  600,
+    "prevent_sleep":  true
+}

@@ -1,0 +1,72 @@
+diff --git a/serve/server.py b/serve/server.py
+index 826a2d227..805340bf6 100644
+--- a/serve/server.py
++++ b/serve/server.py
+@@ -1,4 +1,4 @@
+-"""serve/server.py - plan v0.3 P8: OpenAI and Anthropic endpoints over any engine that maps token ids to tokens.
++﻿"""serve/server.py - plan v0.3 P8: OpenAI and Anthropic endpoints over any engine that maps token ids to tokens.
+ 
+     python -m serve.server --engine mock --port 8095            (a scripted engine, for clients and tests)
+     python -m serve.server --engine strata --config strata.json --port 8080   (the real engine, resident)
+@@ -3194,6 +3194,11 @@ class Vision:
+ 
+     def __init__(self, cfg: dict, log=None, env: dict | None = None, lazy: bool = False):
+         args = self.reader_args(cfg)
++        cd = cfg.get("cuda_device")
++        if isinstance(cd, int) and env is not None:
++            vis = (env.get("CUDA_VISIBLE_DEVICES") or "").split(",")
++            if len(vis) > cd and vis[cd].strip():
++                env = dict(env); env["CUDA_VISIBLE_DEVICES"] = vis[cd].strip()   # the reader's own card, not the engine's ring card
+         self.dir = self.work_dir()
+         self.spawn = (args, log, env)                   # to start it again after an unload
+         # AMD: the GPU reader (strata-vision-hip) has the CPU reader (strata-vision, same program, no GPU runtime) to
+@@ -3920,7 +3925,10 @@ def engine_args(cfg: dict, exe: str | None = None, *, announce: bool = True) ->
+     # engine sizes the rest; one plain note says it is slower (strata_control/vram_fit.py fit_start).  The person's own values are kept.  Nothing changes without one
+     # card's memory, or on a layer split.
+     try:
+-        args, fit_parallel, fit_note = vram_fit.fit_start(cfg, args, drafting_vram_mib(cfg, backend, archs), backend)
++        if "split" in str(cfg.get("exe", "")).lower():
++            args, fit_parallel, fit_note = args, None, ""   # split-engine configs: their own pool sizing, the exe rejects --kv-resident
++        else:
++            args, fit_parallel, fit_note = vram_fit.fit_start(cfg, args, drafting_vram_mib(cfg, backend, archs), backend)
+     except Exception:                                        # noqa: BLE001 - an estimate that fails decides nothing; the engine still refuses what does not fit
+         fit_parallel, fit_note = None, ""
+     if fit_note and announce:                                # (announce=False builds the arguments without any line)
+@@ -4706,7 +4714,7 @@ class Detokenizer:
+             return self.inc.decode(self.tok.token_bytes(t))
+         self.ids.append(t)
+         text = self.tok.decode(self.ids)
+-        if text.endswith("�"):
++        if text.endswith("ï¿½"):
+             return ""
+         delta, self.sent = text[self.sent:], len(text)
+         return delta
+diff --git a/serve/telemetry.py b/serve/telemetry.py
+index 81abf268e..9f4e0a8e4 100644
+--- a/serve/telemetry.py
++++ b/serve/telemetry.py
+@@ -544,6 +544,11 @@ class Telemetry:
+         self.now: dict = {}
+         self.hist = collections.defaultdict(lambda: collections.deque(maxlen=HISTORY))
+         idx = list(gpu_indices) if gpu_indices and len(gpu_indices) > 1 else [gpu_index]
++        if len(idx) == 1 and not amd:      # sfnx-style engines: the engine picks every NVIDIA card itself and the
++                                           # config names none, so enumerate NVML and report all of them (monitor VRAM total)
++            for i in range(1, 8):
++                if i != idx[0] and gpu_reader(i, False).ok():
++                    idx.append(i)
+         self.gpus = [(i, gpu_reader(i, amd)) for i in idx]
+         self.gpus = [(i, g) for i, g in self.gpus if g.ok()] or self.gpus[:1]
+         self.gpu = self.gpus[0][1]
+diff --git a/strata_cli/client.py b/strata_cli/client.py
+index 90c9a7c4f..c22d394fb 100644
+--- a/strata_cli/client.py
++++ b/strata_cli/client.py
+@@ -426,7 +426,7 @@ def sanitize_telemetry(raw: dict[str, Any]) -> dict[str, Any]:
+                      "replica_devices": replica_devices, "replica_stages": replica_stages,
+                      "resolved": placement_resolved,
+                      "stages": stages, "source": _short(topology.get("source"), 40)},
+-        "devices": _rows(raw.get("devices"), ("index", "name", "mem_used", "mem_total", "util", "temp", "power"), 16),
++        "devices": _rows(raw.get("devices") or safe_devices, ("index", "name", "mem_used", "mem_total", "util", "temp", "power"), 16),
+         "ram": {"used": _number(ram.get("used")), "total": _number(ram.get("total"))},
+         "recent": _rows(raw.get("recent"), ("id", "time", "duration_s", "finish", "prompt_tokens",
+                                            "reused", "output_tokens", "prompt_ms", "decode_ms",
